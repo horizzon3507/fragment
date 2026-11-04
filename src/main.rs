@@ -6,6 +6,7 @@ use clap::Parser;
 use fragment::config::Config;
 use fragment::library;
 use fragment::session;
+use fragment::stats::Stats;
 
 /// Guess the song from a snippet that keeps growing.
 #[derive(Parser, Debug)]
@@ -54,6 +55,12 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
+
+    let mut stats = Stats::load().unwrap_or_default();
+    stats.record(&session);
+    if let Err(err) = stats.save() {
+        eprintln!("fragment: could not save stats: {err}");
+    }
 
     if session.aborted() {
         std::process::exit(130);
