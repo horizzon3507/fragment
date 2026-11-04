@@ -6,7 +6,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Gauge, Paragraph};
+use ratatui::widgets::{Block, Gauge, Padding, Paragraph};
 
 use crate::game::{GuessOutcome, LEVELS, Round};
 use crate::player::Player;
@@ -83,10 +83,7 @@ pub fn play_round(
         // The level timer ran out: same as pressing Tab.
         if reveal.is_none() && level_start.elapsed() >= level_len {
             if advance(round, player, &mut status, &mut level_start) {
-                reveal = Some(Reveal {
-                    end: RoundEnd::Exhausted,
-                    elapsed: round.elapsed(),
-                });
+                reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
             }
             continue;
         }
@@ -103,8 +100,14 @@ pub fn play_round(
         }
         let key = match event::read()? {
             Event::Key(key) => key,
-            // Pasted text counts as typed input, minus control chars.
+            // On the reveal screen a paste dismisses it like any key;
+            // during play, pasted text counts as typed input minus
+            // control chars.
             Event::Paste(s) => {
+                if let Some(reveal) = reveal {
+                    let _ = player.stop();
+                    return Ok((reveal.end, reveal.elapsed));
+                }
                 input.extend(s.chars().filter(|c| !c.is_control()));
                 continue;
             }
@@ -130,37 +133,25 @@ pub fn play_round(
 
         match (key.code, key.modifiers) {
             (KeyCode::Esc, _) => {
-                reveal = Some(Reveal {
-                    end: RoundEnd::GaveUp,
-                    elapsed: round.elapsed(),
-                });
+                reveal = Some(enter_reveal(round, player, RoundEnd::GaveUp));
             }
             // A blank Enter clears the prompt without spending the level.
             (KeyCode::Enter, _) if input.trim().is_empty() => input.clear(),
             (KeyCode::Enter, _) => match round.submit(&input) {
                 GuessOutcome::Correct => {
-                    reveal = Some(Reveal {
-                        end: RoundEnd::Solved,
-                        elapsed: round.elapsed(),
-                    });
+                    reveal = Some(enter_reveal(round, player, RoundEnd::Solved));
                 }
                 GuessOutcome::Wrong => {
                     input.clear();
                     if advance(round, player, &mut status, &mut level_start) {
-                        reveal = Some(Reveal {
-                            end: RoundEnd::Exhausted,
-                            elapsed: round.elapsed(),
-                        });
+                        reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
                     }
                 }
             },
             (KeyCode::Tab, _) | (KeyCode::Char('+'), _)
                 if advance(round, player, &mut status, &mut level_start) =>
             {
-                reveal = Some(Reveal {
-                    end: RoundEnd::Exhausted,
-                    elapsed: round.elapsed(),
-                });
+                reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
             }
             // advance() already ran in the guard above; swallow the key.
             (KeyCode::Tab, _) | (KeyCode::Char('+'), _) => {}
@@ -186,6 +177,16 @@ fn start_level(round: &Round, player: &Player, status: &mut Option<String>) -> I
     Instant::now()
 }
 
+/// Enter the reveal screen: stop the snippet and freeze the end state
+/// and elapsed time.
+fn enter_reveal(round: &Round, player: &Player, end: RoundEnd) -> Reveal {
+    let _ = player.stop();
+    Reveal {
+        end,
+        elapsed: round.elapsed(),
+    }
+}
+
 /// Consume the current level and start the next one. Returns true when the
 /// final level was consumed and the round is exhausted.
 fn advance(
@@ -205,25 +206,37 @@ fn advance(
 fn draw(frame: &mut Frame, round: &Round, view: &View) {
     let [header_area, body, misses_area, status_area, input_area] = Layout::vertical([
         Constraint::Length(1),
-        Constraint::Min(5),
-        Constraint::Length(LEVELS.len() as u16),
+        Constraint::Min(4),
+        Constraint::Max(LEVELS.len() as u16),
         Constraint::Length(1),
         Constraint::Length(1),
     ])
     .areas(frame.area());
 
-    let header = Line::from(vec![
+    let dim = Style::default().add_modifier(Modifier::DIM);
+    let header = view.header;
+    let streak_style = if header.streak >= 2 {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    let header_line = Line::from(vec![
         Span::styled(
-            format!("round {}/{}", view.header.round, view.header.total),
+            format!("round {}/{}", header.round, header.total),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!(
-            "  ·  score {}  ·  streak {}",
-            view.header.score, view.header.streak
-        )),
+        Span::styled(" · ", dim),
+        Span::styled(
+            format!("score {}", header.score),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" · ", dim),
+        Span::styled(format!("streak {}", header.streak), streak_style),
     ]);
     frame.render_widget(
-        Paragraph::new(header).alignment(Alignment::Center),
+        Paragraph::new(header_line).alignment(Alignment::Center),
         header_area,
     );
 
@@ -237,8 +250,11 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
         .iter()
         .map(|m| {
             Line::from(vec![
-                Span::styled("✗ ", Style::default().fg(Color::Red)),
-                Span::raw(m.clone()),
+                Span::styled(
+                    "✗ ",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::DIM),
+                ),
+                Span::styled(m.clone(), dim),
             ])
         })
         .collect();
@@ -251,26 +267,36 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
         )),
         None => Line::from(Span::styled(
             " enter: guess · tab/+: more time · esc: give up · ctrl+c: quit",
-            Style::default().add_modifier(Modifier::DIM),
+            dim,
         )),
     };
     frame.render_widget(Paragraph::new(status), status_area);
 
+    let revealing = view.reveal.is_some();
+    let (prompt_style, input_style) = if revealing {
+        (dim, dim)
+    } else {
+        (
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+            Style::default(),
+        )
+    };
     let mut input_spans = vec![
-        Span::styled("> ", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(view.input.to_string()),
+        Span::styled(">", prompt_style),
+        Span::styled(format!(" {}", view.input), input_style),
     ];
-    if view.reveal.is_none() {
-        input_spans.push(Span::styled("█", Style::default().add_modifier(Modifier::DIM)));
+    if !revealing {
+        input_spans.push(Span::styled("█", Style::default().fg(Color::Cyan)));
     }
     frame.render_widget(Paragraph::new(Line::from(input_spans)), input_area);
 }
 
 /// The escalation ladder and the current level's countdown bar.
 fn draw_play(frame: &mut Frame, round: &Round, area: Rect, level_start: Instant) {
-    let [_, ladder_area, _, gauge_area, _, _] = Layout::vertical([
+    let [_, ladder_area, _, gauge_area, _] = Layout::vertical([
         Constraint::Fill(1),
-        Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -279,27 +305,32 @@ fn draw_play(frame: &mut Frame, round: &Round, area: Rect, level_start: Instant)
     .areas(area);
     let [_, gauge_area, _] = Layout::horizontal([
         Constraint::Fill(1),
-        Constraint::Percentage(60),
+        Constraint::Max(60),
         Constraint::Fill(1),
     ])
     .areas(gauge_area);
 
-    let mut spans = Vec::with_capacity(LEVELS.len() * 2);
+    // Step segments: filled block for consumed levels, arrow for the
+    // current one, dot for pending.
+    let idx = round.level_idx();
+    let dim = Style::default().add_modifier(Modifier::DIM);
+    let accent = Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD);
+    let mut spans = Vec::with_capacity(LEVELS.len() * 3);
     for (i, secs) in LEVELS.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(
-                " ▶ ",
-                Style::default().add_modifier(Modifier::DIM),
-            ));
+            spans.push(Span::raw("  "));
         }
-        let style = if i == round.level_idx() {
-            Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
-        } else if i < round.level_idx() {
-            Style::default().add_modifier(Modifier::DIM)
+        let (mark, mark_style, label_style) = if i < idx {
+            ("█", dim, dim)
+        } else if i == idx {
+            ("▶", accent, accent)
         } else {
-            Style::default()
+            ("·", dim, Style::default())
         };
-        spans.push(Span::styled(format!("{secs}s"), style));
+        spans.push(Span::styled(mark, mark_style));
+        spans.push(Span::styled(format!(" {secs}s"), label_style));
     }
     frame.render_widget(
         Paragraph::new(Line::from(spans)).alignment(Alignment::Center),
@@ -309,9 +340,17 @@ fn draw_play(frame: &mut Frame, round: &Round, area: Rect, level_start: Instant)
     let level_len = Duration::from_secs(round.level_secs());
     let remaining = level_len.saturating_sub(level_start.elapsed());
     let ratio = (remaining.as_secs_f64() / level_len.as_secs_f64()).clamp(0.0, 1.0);
+    let bar_color = if ratio > 0.5 {
+        Color::Green
+    } else if ratio > 0.25 {
+        Color::Yellow
+    } else {
+        Color::Red
+    };
     let gauge = Gauge::default()
+        .style(Style::default().fg(Color::DarkGray))
         .use_unicode(true)
-        .gauge_style(Style::default().fg(Color::Cyan))
+        .gauge_style(Style::default().fg(bar_color))
         .ratio(ratio)
         .label(format!("{:.1}s", remaining.as_secs_f64()));
     frame.render_widget(gauge, gauge_area);
@@ -320,41 +359,62 @@ fn draw_play(frame: &mut Frame, round: &Round, area: Rect, level_start: Instant)
 /// The answer, shown once the round is over until a key is pressed.
 fn draw_reveal(frame: &mut Frame, round: &Round, area: Rect, reveal: Reveal) {
     let track = round.track();
-    let mut lines = vec![
-        Line::from(Span::styled(
-            track.title.clone(),
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::default(),
-    ];
+    let dim = Style::default().add_modifier(Modifier::DIM);
+
+    let mut lines = vec![Line::from(Span::styled(
+        track.title.clone(),
+        Style::default().add_modifier(Modifier::BOLD),
+    ))];
     if let Some(artist) = &track.artist {
-        lines.push(Line::from(Span::styled(
-            artist.clone(),
-            Style::default().add_modifier(Modifier::DIM),
-        )));
+        lines.push(Line::from(Span::styled(artist.clone(), dim)));
     }
-    lines.push(Line::from(format!(
-        "level {}/{} · {}s snippet · {:.1}s elapsed",
-        round.level_idx() + 1,
-        LEVELS.len(),
-        round.level_secs(),
-        reveal.elapsed.as_secs_f64(),
+    lines.push(Line::from(Span::styled(
+        format!(
+            "{}s · {:.1}s elapsed",
+            round.level_secs(),
+            reveal.elapsed.as_secs_f64()
+        ),
+        dim,
     )));
     lines.push(Line::default());
-    lines.push(Line::from(Span::styled(
-        "press any key",
-        Style::default().add_modifier(Modifier::DIM),
-    )));
+    lines.push(Line::from(Span::styled("press any key", dim)));
 
-    let height = lines.len() as u16;
-    let [_, reveal_area, _] = Layout::vertical([
+    let (mark, mark_style) = if reveal.end == RoundEnd::Solved {
+        ("✓ ", Style::default().fg(Color::Green))
+    } else {
+        ("✗ ", Style::default().fg(Color::Red))
+    };
+    let title = Line::from(vec![
+        Span::raw(" "),
+        Span::styled(mark, mark_style),
+        Span::styled("the answer ", dim),
+    ])
+    .centered();
+
+    // Size the frame to its content, capped by the available area.
+    let width = (lines.iter().map(Line::width).max().unwrap_or(0) as u16 + 6).max(24);
+    let height = lines.len() as u16 + 2;
+    let [_, frame_area, _] = Layout::vertical([
         Constraint::Fill(1),
-        Constraint::Length(height),
+        Constraint::Max(height),
         Constraint::Fill(1),
     ])
     .areas(area);
+    let [_, frame_area, _] = Layout::horizontal([
+        Constraint::Fill(1),
+        Constraint::Max(width),
+        Constraint::Fill(1),
+    ])
+    .areas(frame_area);
+
+    let block = Block::bordered()
+        .border_style(dim)
+        .padding(Padding::horizontal(1))
+        .title_top(title);
     frame.render_widget(
-        Paragraph::new(lines).alignment(Alignment::Center),
-        reveal_area,
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .block(block),
+        frame_area,
     );
 }
