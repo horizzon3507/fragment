@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, Gauge, Padding, Paragraph};
 
 use crate::game::{GuessOutcome, LEVELS, Round};
 use crate::player::Player;
+use crate::suggest::{Candidate, Candidates};
 use crate::tui::Tui;
 
 /// Header strip above the play area (round n/N · score · streak).
@@ -45,6 +46,8 @@ struct View<'a> {
     level_start: Instant,
     status: Option<&'a str>,
     reveal: Option<Reveal>,
+    suggestions: &'a [&'a Candidate],
+    sel: Option<usize>,
 }
 
 /// The frozen data behind the reveal screen.
@@ -55,28 +58,44 @@ struct Reveal {
 }
 
 /// Run one interactive round: play the snippet, handle guessing,
-/// escalation and the reveal screen. Returns how the round ended and the
-/// elapsed time frozen when the reveal screen appeared, so dwell on that
-/// screen does not leak into scoring.
+/// escalation and the reveal screen. `cands` feeds the title autocomplete
+/// under the input. Returns how the round ended and the elapsed time
+/// frozen when the reveal screen appeared, so dwell on that screen does
+/// not leak into scoring.
 pub fn play_round(
     term: &mut Tui,
     round: &mut Round,
     player: &Player,
     header: &Header,
+    cands: &Candidates,
 ) -> Result<(RoundEnd, Duration)> {
     let mut input = String::new();
     let mut status = None;
     let mut reveal = None;
+    // Highlighted row of the suggestion dropdown, if any.
+    let mut sel: Option<usize> = None;
     let mut level_start = start_level(round, player, &mut status);
 
     loop {
         let level_len = Duration::from_secs(round.level_secs());
+        // The dropdown hides on the reveal screen and on an empty input.
+        let suggestions: Vec<&Candidate> = if reveal.is_some() {
+            Vec::new()
+        } else {
+            cands.search(&input, 5)
+        };
+        // A stale highlight cannot outlive the list it points into.
+        if sel.is_some_and(|s| s >= suggestions.len()) {
+            sel = None;
+        }
         let view = View {
             header,
             input: &input,
             level_start,
             status: status.as_deref(),
             reveal,
+            suggestions: &suggestions,
+            sel,
         };
         term.draw(|frame| draw(frame, round, &view))?;
 
@@ -109,6 +128,7 @@ pub fn play_round(
                     return Ok((reveal.end, reveal.elapsed));
                 }
                 input.extend(s.chars().filter(|c| !c.is_control()));
+                sel = None;
                 continue;
             }
             _ => continue,
@@ -132,9 +152,21 @@ pub fn play_round(
         }
 
         match (key.code, key.modifiers) {
+            // Esc clears a dropdown pick first; it gives up otherwise.
+            (KeyCode::Esc, _) if sel.is_some() => sel = None,
             (KeyCode::Esc, _) => {
                 reveal = Some(enter_reveal(round, player, RoundEnd::GaveUp));
             }
+            (KeyCode::Up, _) if !suggestions.is_empty() => {
+                sel = Some(sel.map_or(0, |s| s.saturating_sub(1)));
+            }
+            (KeyCode::Down, _) if !suggestions.is_empty() => {
+                sel = Some(sel.map_or(0, |s| (s + 1).min(suggestions.len() - 1)));
+            }
+            // Right accepts the highlight, or the top row when nothing is
+            // picked. Enter accepts only a picked row; otherwise it submits.
+            (KeyCode::Right, _) => accept(&suggestions, &mut sel, &mut input),
+            (KeyCode::Enter, _) if sel.is_some() => accept(&suggestions, &mut sel, &mut input),
             // A blank Enter clears the prompt without spending the level.
             (KeyCode::Enter, _) if input.trim().is_empty() => input.clear(),
             (KeyCode::Enter, _) => match round.submit(&input) {
@@ -148,6 +180,10 @@ pub fn play_round(
                     }
                 }
             },
+            // Ctrl+R replays the current snippet from the same offset.
+            (KeyCode::Char('r' | 'R'), m) if m.contains(KeyModifiers::CONTROL) => {
+                level_start = start_level(round, player, &mut status);
+            }
             (KeyCode::Tab, _) | (KeyCode::Char('+'), _)
                 if advance(round, player, &mut status, &mut level_start) =>
             {
@@ -157,8 +193,12 @@ pub fn play_round(
             (KeyCode::Tab, _) | (KeyCode::Char('+'), _) => {}
             (KeyCode::Backspace, _) => {
                 input.pop();
+                sel = None;
             }
-            (KeyCode::Char(c), m) if !m.contains(KeyModifiers::CONTROL) => input.push(c),
+            (KeyCode::Char(c), m) if !m.contains(KeyModifiers::CONTROL) => {
+                input.push(c);
+                sel = None;
+            }
             _ => {}
         }
     }
@@ -187,6 +227,14 @@ fn enter_reveal(round: &Round, player: &Player, end: RoundEnd) -> Reveal {
     }
 }
 
+/// Fill the input from a suggestion row: the highlighted one, or the top
+/// row when nothing is highlighted. No-op on an empty list.
+fn accept(suggestions: &[&Candidate], sel: &mut Option<usize>, input: &mut String) {
+    if let Some(cand) = suggestions.get(sel.take().unwrap_or(0)) {
+        *input = cand.fill().to_string();
+    }
+}
+
 /// Consume the current level and start the next one. Returns true when the
 /// final level was consumed and the round is exhausted.
 fn advance(
@@ -204,14 +252,16 @@ fn advance(
 }
 
 fn draw(frame: &mut Frame, round: &Round, view: &View) {
-    let [header_area, body, misses_area, status_area, input_area] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(4),
-        Constraint::Max(LEVELS.len() as u16),
-        Constraint::Length(1),
-        Constraint::Length(1),
-    ])
-    .areas(frame.area());
+    let [header_area, body, misses_area, status_area, input_area, sugg_area] =
+        Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(4),
+            Constraint::Max(LEVELS.len() as u16),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Max(5),
+        ])
+        .areas(frame.area());
 
     let dim = Style::default().add_modifier(Modifier::DIM);
     let header = view.header;
@@ -265,10 +315,18 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
             format!(" {msg}"),
             Style::default().fg(Color::Red),
         )),
-        None => Line::from(Span::styled(
-            " enter: guess · tab/+: more time · esc: give up · ctrl+c: quit",
-            dim,
-        )),
+        None => {
+            let hint = if !view.suggestions.is_empty() {
+                if view.sel.is_some() {
+                    " ↑↓: move · →/enter: accept · esc: clear pick"
+                } else {
+                    " ↑↓: pick · →/enter: accept · esc: give up"
+                }
+            } else {
+                " enter: guess · tab/+: more · ctrl+r: replay · esc: give up"
+            };
+            Line::from(Span::styled(hint, dim))
+        }
     };
     frame.render_widget(Paragraph::new(status), status_area);
 
@@ -291,6 +349,31 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
         input_spans.push(Span::styled("█", Style::default().fg(Color::Cyan)));
     }
     frame.render_widget(Paragraph::new(Line::from(input_spans)), input_area);
+
+    if !view.suggestions.is_empty() {
+        let accent = Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD);
+        let rows: Vec<Line> = view
+            .suggestions
+            .iter()
+            .enumerate()
+            .map(|(i, cand)| {
+                if view.sel == Some(i) {
+                    Line::from(vec![
+                        Span::styled(" ▸ ", accent),
+                        Span::styled(cand.display.clone(), accent),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::raw("   "),
+                        Span::styled(cand.display.clone(), dim),
+                    ])
+                }
+            })
+            .collect();
+        frame.render_widget(Paragraph::new(rows), sugg_area);
+    }
 }
 
 /// The escalation ladder and the current level's countdown bar.
