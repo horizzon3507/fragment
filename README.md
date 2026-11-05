@@ -25,13 +25,17 @@ cargo build --release   # → target/release/fragment
 ## Usage
 
 ```sh
-fragment [--dir DIR] [--rounds N]
+fragment [DIR] [--dir DIR] [--rounds N] [--stats]
 ```
 
 | Flag | Default | Description |
 | --- | --- | --- |
+| `DIR` | — | Positional music library directory (same as `--dir`; the flag wins if both are given) |
 | `--dir DIR` | XDG music dir | Music library directory, scanned recursively (`~/Music` on most systems, `$HOME/Music` fallback) |
 | `--rounds N` | `5` | Rounds per session (1–99) |
+| `--stats` | — | Print lifetime stats to stdout and exit |
+
+So `fragment ~/Music/rock` plays only from that directory.
 
 ## How it plays
 
@@ -39,15 +43,20 @@ Each round picks a random track and a random start offset, then plays a **1s** s
 
 **1s → 2s → 4s → 8s → 16s → 30s**
 
-Once the last level is spent — or you give up — the reveal shows the title, artist, level reached and your elapsed time. After N rounds you get a scoreboard: per-round results, total score, best streak.
+Once the last level is spent — or you give up — the reveal shows the title, artist, level reached and your elapsed time. After N rounds you get a scoreboard: per-round results, score-per-round and wins-per-level charts, a recent-scores sparkline, total score, best streak and all-time stats.
 
 | Key | Action |
 | --- | --- |
-| `Enter` | Submit guess (blank Enter clears the prompt) |
+| `Enter` | Submit guess — or accept the highlighted suggestion (blank Enter clears the prompt) |
 | `Tab` / `+` | Skip to the next snippet length |
-| `Esc` | Give up and reveal the answer |
+| `Ctrl+R` | Replay the current snippet from the same offset |
+| `↑` / `↓` | Move the suggestion highlight |
+| `→` | Accept a suggestion (the highlight, or the top row) |
+| `Esc` | Clear the suggestion pick, then give up and reveal the answer |
 | `Ctrl+C` | Quit the session |
 | `Backspace` | Edit your guess |
+
+As you type, matching library tracks appear under the input — title prefixes rank first, then `Artist - Title` matches.
 
 ## Scoring
 
@@ -83,7 +92,7 @@ Precedence: **CLI flags > config file > defaults**. Both keys are optional, `~` 
 
 ## Stats
 
-Lifetime stats persist to `$XDG_DATA_HOME/fragment/stats.json` (Linux: `~/.local/share/fragment/stats.json`): games played, rounds won, rounds played, best streak, and average guess time across solved rounds. A corrupt file is moved aside to `stats.json.bak` instead of crashing or losing data.
+Lifetime stats persist to `$XDG_DATA_HOME/fragment/stats.json` (Linux: `~/.local/share/fragment/stats.json`): games played, rounds won, rounds played, best streak, average guess time across solved rounds, wins per snippet level, and the last 30 game totals. `fragment --stats` prints them to stdout; the scoreboard shows the same numbers as charts. A corrupt file is moved aside to `stats.json.bak` instead of crashing or losing data.
 
 ## License
 
