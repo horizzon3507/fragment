@@ -108,7 +108,7 @@ impl Player {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         {
-            let mut stream = self.ipc.lock().expect("mpv command mutex poisoned");
+            let mut stream = self.ipc.lock().unwrap_or_else(|e| e.into_inner());
             // Pass the offset to loadfile itself so the start lands before
             // the file is open; the seek after it is a safety net for older
             // mpv versions that ignore the options object.
@@ -138,7 +138,7 @@ impl Player {
         let generations = Arc::clone(&self.generation);
         thread::spawn(move || {
             thread::sleep(length);
-            let mut stream = ipc.lock().expect("mpv command mutex poisoned");
+            let mut stream = ipc.lock().unwrap_or_else(|e| e.into_inner());
             if generations.load(Ordering::SeqCst) == generation {
                 let _ = send_locked(
                     &mut stream,
@@ -152,7 +152,7 @@ impl Player {
     /// Pause playback and cancel any pending pause timer.
     pub fn stop(&self) -> Result<()> {
         self.generation.fetch_add(1, Ordering::SeqCst);
-        let mut stream = self.ipc.lock().expect("mpv command mutex poisoned");
+        let mut stream = self.ipc.lock().unwrap_or_else(|e| e.into_inner());
         send_locked(&mut stream, json!({"command": ["set_property", "pause", true]}))
     }
 }
