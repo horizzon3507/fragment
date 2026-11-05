@@ -55,13 +55,15 @@ struct Reveal {
 }
 
 /// Run one interactive round: play the snippet, handle guessing,
-/// escalation and the reveal screen. Returns when the round is over.
+/// escalation and the reveal screen. Returns how the round ended and the
+/// elapsed time frozen when the reveal screen appeared, so dwell on that
+/// screen does not leak into scoring.
 pub fn play_round(
     term: &mut Tui,
     round: &mut Round,
     player: &Player,
     header: &Header,
-) -> Result<RoundEnd> {
+) -> Result<(RoundEnd, Duration)> {
     let mut input = String::new();
     let mut status = None;
     let mut reveal = None;
@@ -117,13 +119,13 @@ pub fn play_round(
             && key.modifiers.contains(KeyModifiers::CONTROL)
         {
             let _ = player.stop();
-            return Ok(RoundEnd::Quit);
+            return Ok((RoundEnd::Quit, round.elapsed()));
         }
 
         // Any other press dismisses the reveal screen.
         if let Some(reveal) = reveal {
             let _ = player.stop();
-            return Ok(reveal.end);
+            return Ok((reveal.end, reveal.elapsed));
         }
 
         match (key.code, key.modifiers) {
