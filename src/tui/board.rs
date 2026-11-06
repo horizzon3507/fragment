@@ -88,28 +88,18 @@ fn draw(frame: &mut Frame, session: &Session, stats: &Stats) {
     );
 
     if charts_h > 0 {
-        let [scores_area, levels_area] = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        ])
-        .areas(c[4]);
+        let [scores_area, levels_area] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(c[4]);
         draw_score_chart(frame, session, scores_area, dim);
         draw_levels_chart(frame, stats, levels_area, dim);
     }
 
     if spark_h > 0 && !stats.recent_scores.is_empty() {
-        let data: Vec<u64> = stats
-            .recent_scores
-            .iter()
-            .map(|s| u64::from(*s))
-            .collect();
+        let data: Vec<u64> = stats.recent_scores.iter().map(|s| u64::from(*s)).collect();
         frame.render_widget(
             Sparkline::default()
-                .block(
-                    Block::bordered()
-                        .title("recent scores")
-                        .border_style(dim),
-                )
+                .block(Block::bordered().title("recent scores").border_style(dim))
                 .data(&data)
                 .style(Style::default().fg(Color::Yellow)),
             c[5],
@@ -170,11 +160,7 @@ fn draw_score_chart(frame: &mut Frame, session: &Session, area: Rect, dim: Style
         .collect();
     frame.render_widget(
         BarChart::default()
-            .block(
-                Block::bordered()
-                    .title("score per round")
-                    .border_style(dim),
-            )
+            .block(Block::bordered().title("score per round").border_style(dim))
             .data(BarGroup::default().bars(&bars))
             .bar_width(3)
             .bar_gap(1)
@@ -193,11 +179,7 @@ fn draw_levels_chart(frame: &mut Frame, stats: &Stats, area: Rect, dim: Style) {
         .collect();
     frame.render_widget(
         BarChart::default()
-            .block(
-                Block::bordered()
-                    .title("wins per level")
-                    .border_style(dim),
-            )
+            .block(Block::bordered().title("wins per level").border_style(dim))
             .data(&data[..])
             .bar_width(5)
             .bar_gap(2)
