@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use rand::RngExt;
-use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
+use unicode_normalization::char::is_combining_mark;
 
 use crate::types::Track;
 

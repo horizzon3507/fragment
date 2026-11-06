@@ -55,9 +55,8 @@ impl Stats {
             anyhow::bail!("failed to resolve stats data directory");
         };
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir).with_context(|| {
-                format!("failed to create stats directory {}", dir.display())
-            })?;
+            fs::create_dir_all(dir)
+                .with_context(|| format!("failed to create stats directory {}", dir.display()))?;
         }
         let text = serde_json::to_string_pretty(self).context("failed to serialize stats")?;
         let tmp = path.with_extension("json.tmp");
@@ -112,11 +111,17 @@ impl Stats {
         println!();
         println!("games played      {}", self.games);
         let pct = if self.rounds_played > 0 {
-            format!(" ({:.0}%)", self.rounds_won as f64 / self.rounds_played as f64 * 100.0)
+            format!(
+                " ({:.0}%)",
+                self.rounds_won as f64 / self.rounds_played as f64 * 100.0
+            )
         } else {
             String::new()
         };
-        println!("rounds won        {}/{}{pct}", self.rounds_won, self.rounds_played);
+        println!(
+            "rounds won        {}/{}{pct}",
+            self.rounds_won, self.rounds_played
+        );
         println!("best streak       {}", self.best_streak);
         if self.rounds_won > 0 {
             println!("avg guess time    {:.1}s", self.avg_guess_time);
@@ -127,13 +132,16 @@ impl Stats {
             println!("\nwins per level");
             for (secs, wins) in LEVELS.iter().zip(self.wins_by_level.iter()) {
                 let width = (*wins * 30 / max) as usize;
-                println!("  {secs:>2}s  {:<width$} {wins}", "█".repeat(width), width = 30);
+                println!(
+                    "  {secs:>2}s  {:<width$} {wins}",
+                    "█".repeat(width),
+                    width = 30
+                );
             }
         }
 
         if !self.recent_scores.is_empty() {
-            let scores: Vec<String> =
-                self.recent_scores.iter().map(u32::to_string).collect();
+            let scores: Vec<String> = self.recent_scores.iter().map(u32::to_string).collect();
             println!("\nrecent scores     {}", scores.join(" · "));
         }
     }
