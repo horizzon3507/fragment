@@ -23,7 +23,13 @@ pub struct RoundResult {
 }
 
 impl RoundResult {
-    pub fn new(track: Track, solved: bool, level_idx: usize, elapsed: Duration, score: u32) -> Self {
+    pub fn new(
+        track: Track,
+        solved: bool,
+        level_idx: usize,
+        elapsed: Duration,
+        score: u32,
+    ) -> Self {
         Self {
             track,
             solved,

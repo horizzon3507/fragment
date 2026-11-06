@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::probe::Probe;
 use lofty::tag::Accessor;
@@ -21,8 +21,14 @@ pub fn scan(dir: &Path) -> Result<Vec<Track>> {
         anyhow::bail!("'{}' does not exist or is not a directory", dir.display());
     }
 
+    // Canonicalize so track paths are absolute: mpv reports the resolved
+    // path on `path`, and a relative path here would never match.
+    let dir = dir
+        .canonicalize()
+        .with_context(|| format!("failed to resolve {}", dir.display()))?;
+
     let mut tracks = Vec::new();
-    for entry in WalkDir::new(dir)
+    for entry in WalkDir::new(&dir)
         .follow_links(true)
         .into_iter()
         .filter_entry(|e| e.depth() == 0 || !is_hidden(e))
@@ -146,10 +152,7 @@ mod tests {
             parse_stem("Artist - Title (Live) [Remaster]"),
             (Some("Artist".to_string()), "Title".to_string())
         );
-        assert_eq!(
-            strip_trailing_brackets("Song [a] (b) [c]"),
-            "Song"
-        );
+        assert_eq!(strip_trailing_brackets("Song [a] (b) [c]"), "Song");
     }
 
     #[test]

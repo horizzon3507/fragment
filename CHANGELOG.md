@@ -29,6 +29,13 @@ We only call something **stable** when we mean it.
 
 </details>
 
+## v0.2.1-alpha · 05/11/2026
+
+A one-line-repro fix for the headline feature of v0.2.0: running `fragment` with a relative music dir (`fragment Music`) made every round report `mpv did not load`. mpv resolves the file to an absolute path before it reports `path`, so the load check never matched a relative one. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.1-alpha).
+
+- Fix `mpv did not load` on every round when the music dir is relative: the scan and the per-snippet path are canonicalized before they reach mpv, so the `path` comparison that gates playback matches what mpv resolved.
+- Various other small tweaks.
+
 ## v0.2.0-alpha · 05/11/2026
 
 Sound, actually. The first alpha shipped an mpv IPC call its newer builds reject, so snippets never loaded and the game was silent — this version fixes playback and adds the quality-of-life layer on top. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.0-alpha).
