@@ -1,6 +1,6 @@
 [package]
 name = "fragment"
-version = "0.2.1-alpha"
+version = "0.3.0-alpha"
 edition = "2024"
 description = "Guess the song from a snippet that keeps growing — local music, terminal game"
 license = "MIT"
