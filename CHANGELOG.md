@@ -29,6 +29,14 @@ We only call something **stable** when we mean it.
 
 </details>
 
+## v0.3.0-alpha · 08/11/2026
+
+Guessing is calmer and the autocomplete is the default path. Level timers no longer steal the round — when one runs out, the snippet stays its current length until you ask for more — and Enter always means "take the top prediction", so typing a couple of letters and hitting Enter is the fastest way through a round. This version was made for CLI with an alpha release channel on 08/11/2026 (v0.3.0-alpha).
+
+- Timer expiry no longer escalates on its own: the level freezes and waits for `Tab`/`+` (Enter still submits a guess, `Ctrl+R` still replays, `Esc` still gives up).
+- `Enter` submits the highlighted suggestion, or the top prediction when nothing is highlighted — the raw typed text is used only when nothing matches it. `→` still fills the input for editing.
+- `↑`/`↓` wrap around the suggestion list, and the first `↓` moves off the pre-highlighted top row.
+
 ## v0.2.1-alpha · 05/11/2026
 
 A one-line-repro fix for the headline feature of v0.2.0: running `fragment` with a relative music dir (`fragment Music`) made every round report `mpv did not load`. mpv resolves the file to an absolute path before it reports `path`, so the load check never matched a relative one. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.1-alpha).
