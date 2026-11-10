@@ -11,11 +11,11 @@ Here the installable surface is **CLI** (`fragment` in the terminal).
 
 | Part | What you install | Example |
 | --- | --- | --- |
-| **CLI** | `fragment` in the terminal | `v0.1.0-alpha` |
+| **CLI** | `fragment` in the terminal | `v0.2.0-alpha` |
 
 With one surface there is no `m` in the tag and no per-surface sections — just the version notes.
 
-Each release heading is the version and date (`## v0.1.0-alpha · 04/11/2026`); under it, a short summary ends with a plain sentence like: "This version was made for CLI with an alpha release channel on 04/11/2026 (v0.1.0-alpha)."
+Each release heading is the version and date (`## v0.2.0-alpha · 08/11/2026`); under it, a short summary ends with a plain sentence like: "This version was made for CLI with an alpha release channel on 08/11/2026 (v0.2.0-alpha)."
 
 ### What the channel suffix means
 
@@ -29,44 +29,18 @@ We only call something **stable** when we mean it.
 
 </details>
 
-## v0.3.0-alpha · 08/11/2026
+## v0.2.0-alpha · 08/11/2026
 
-Guessing is calmer and the autocomplete is the default path. Level timers no longer steal the round — when one runs out, the snippet stays its current length until you ask for more — and Enter always means "take the top prediction", so typing a couple of letters and hitting Enter is the fastest way through a round. This version was made for CLI with an alpha release channel on 08/11/2026 (v0.3.0-alpha).
+The consolidated cut: a complete local Heardle in your terminal — library scan, escalating snippets through mpv, fuzzy guesses with autocomplete, sessions with streaks and a scoreboard with charts, persistent stats and a config file. This version was made for CLI with an alpha release channel on 08/11/2026 (v0.2.0-alpha).
 
-- Timer expiry no longer escalates on its own: the level freezes and waits for `Tab`/`+` (Enter still submits a guess, `Ctrl+R` still replays, `Esc` still gives up).
-- `Enter` submits the highlighted suggestion, or the top prediction when nothing is highlighted — the raw typed text is used only when nothing matches it. `→` still fills the input for editing.
-- `↑`/`↓` wrap around the suggestion list, and the first `↓` moves off the pre-highlighted top row.
-
-## v0.2.1-alpha · 05/11/2026
-
-A one-line-repro fix for the headline feature of v0.2.0: running `fragment` with a relative music dir (`fragment Music`) made every round report `mpv did not load`. mpv resolves the file to an absolute path before it reports `path`, so the load check never matched a relative one. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.1-alpha).
-
-- Fix `mpv did not load` on every round when the music dir is relative: the scan and the per-snippet path are canonicalized before they reach mpv, so the `path` comparison that gates playback matches what mpv resolved.
-- Various other small tweaks.
-
-## v0.2.0-alpha · 05/11/2026
-
-Sound, actually. The first alpha shipped an mpv IPC call its newer builds reject, so snippets never loaded and the game was silent — this version fixes playback and adds the quality-of-life layer on top. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.0-alpha).
-
-- Fix silent playback: mpv 0.41 rejects `loadfile`'s options object (`invalid parameter`), so no file ever loaded. The player now loads paused, waits for mpv's `file-loaded` event before seeking (a seek sent while the file opens is silently dropped), and checks every IPC reply — playback errors now reach the status line instead of vanishing.
-- Title autocomplete under the guess input: type to filter the library (normalized substring, title prefixes first), `↑`/`↓` to pick, `→` or `Enter` to accept, `Esc` to clear the pick.
-- `Ctrl+R` replays the current snippet from the same offset.
-- Positional music dir: `fragment ~/Music/rock` alongside `--dir`.
-- Scoreboard charts: per-round score bars, all-time wins per level, a recent-scores sparkline and an all-time stats line. `fragment --stats` prints the same numbers to stdout.
-- Stats file gains `wins_by_level` and `recent_scores`; older files load unchanged.
-- Various other small tweaks.
-
-## v0.1.0-alpha · 04/11/2026
-
-The first cut: the full local Heardle loop in your terminal. Pick a directory of music, hear a 1-second snippet, type the title before the snippet eats the whole song. This version was made for CLI with an alpha release channel on 04/11/2026 (v0.1.0-alpha).
-
-- Snippet playback through a persistent `mpv --idle` process driven over its JSON IPC socket, with a random track and a random start offset every round.
-- Escalating snippet ladder — 1s doubling through 2s, 4s, 8s and 16s up to 30s — on a wrong guess, a timeout or a `Tab`/`+` skip.
+- Snippet playback through a persistent `mpv --idle` process driven over its JSON IPC socket: loads paused, waits for `file-loaded`, verifies the resolved path, then seeks to a random offset and plays. Every IPC reply is checked so playback errors reach the status line.
+- Recursive library scan (`--dir` or positional `fragment <dir>`, default `~/Music`): tags via lofty, `"Artist - Title.ext"` filename fallback, deduplicated candidate index.
+- Escalating snippet ladder — 1s doubling through 2s, 4s, 8s and 16s up to 30s. Level growth is always confirmed: `Tab`/`+` grows on demand and the timer only freezes at zero waiting for the same key — it never steals the round.
 - Fuzzy guess matching on normalized text (lowercased, `(feat. …)`-style brackets removed, punctuation and accents stripped): exact match or Jaro-Winkler ≥ 0.85 against the title or `"artist title"`.
-- ratatui TUI with a countdown timer bar, the level ladder, a miss log and a per-round reveal screen.
-- N-round sessions (`--rounds`, default 5) with streak tracking and a final scoreboard.
+- Title autocomplete under the input — normalized substring, title prefixes first. `↑`/`↓` pick with wraparound, `Enter` submits the highlighted or top suggestion, `→` fills the input for editing.
+- `Ctrl+R` replays the current snippet from the same offset.
+- N-round sessions (`--rounds`, default 5) with streak tracking, a reveal screen and a final scoreboard: per-round score bars, all-time wins per level, a recent-scores sparkline and an all-time stats line. `fragment --stats` prints the same numbers to stdout.
 - Scoring per level base (1000 down to 100), a −10-points-per-second time penalty capped at half the base, and a +10%-per-streak multiplier.
-- Recursive library scan of your music dir (`--dir`, default `~/Music`): tags via lofty, `"Artist - Title.ext"` filename fallback.
 - XDG config file at `~/.config/fragment/config.toml` for `music_dir` and `rounds`; CLI flags win over the file, the file wins over defaults.
-- Persistent JSON stats at `~/.local/share/fragment/stats.json`: games, rounds won/played, best streak, average guess time.
+- Persistent JSON stats at `~/.local/share/fragment/stats.json`: games, rounds won/played, best streak, average guess time, wins by level and recent scores — atomic writes with `.bak` recovery.
 - Various other small tweaks.
