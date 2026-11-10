@@ -7,6 +7,8 @@ use crate::config::Config;
 use crate::game::Round;
 use crate::player::Player;
 use crate::scoring;
+use crate::stats::Stats;
+use crate::suggest::Candidates;
 use crate::tui::guess::{Header, RoundEnd, play_round};
 use crate::tui::{self, Tui};
 use crate::types::Track;
@@ -140,8 +142,10 @@ impl Session {
 }
 
 /// Run the whole session: terminal setup, the round loop and the final
-/// scoreboard. Returns the finished session for stats recording.
-pub fn run(cfg: &Config, tracks: Vec<Track>) -> Result<Session> {
+/// scoreboard. `stats` is the lifetime record before this session; the
+/// scoreboard merges it with the session's own numbers. Returns the
+/// finished session for stats recording.
+pub fn run(cfg: &Config, tracks: Vec<Track>, stats: &Stats) -> Result<Session> {
     if tracks.is_empty() {
         anyhow::bail!("no tracks to play");
     }
@@ -151,18 +155,25 @@ pub fn run(cfg: &Config, tracks: Vec<Track>) -> Result<Session> {
     let mut term = tui::init()?;
     // Everything below runs in raw mode: capture the result, restore, then
     // propagate so the terminal always comes back.
-    let result = play_rounds(cfg, &tracks, &player, &mut term);
+    let result = play_rounds(cfg, &tracks, &player, &mut term, stats);
     tui::restore();
     result
 }
 
 /// The raw-mode part of [`run`]: pick tracks, play each round, show the
 /// scoreboard.
-fn play_rounds(cfg: &Config, tracks: &[Track], player: &Player, term: &mut Tui) -> Result<Session> {
+fn play_rounds(
+    cfg: &Config,
+    tracks: &[Track],
+    player: &Player,
+    term: &mut Tui,
+    stats: &Stats,
+) -> Result<Session> {
     // Shuffled indices cycled round-robin: every round gets a distinct
     // track unless rounds outnumber the library.
     let mut order: Vec<usize> = (0..tracks.len()).collect();
     order.shuffle(&mut rand::rng());
+    let cands = Candidates::build(tracks);
 
     let mut session = Session::new(cfg.rounds as usize);
     for i in 0..session.rounds_total() {
@@ -173,7 +184,7 @@ fn play_rounds(cfg: &Config, tracks: &[Track], player: &Player, term: &mut Tui) 
             score: session.total_score(),
             streak: session.current_streak(),
         };
-        match play_round(term, &mut round, player, &header)? {
+        match play_round(term, &mut round, player, &header, &cands)? {
             // Ctrl+C ends the session; the interrupted round is not recorded.
             (RoundEnd::Quit, _) => {
                 session.abort();
@@ -189,7 +200,10 @@ fn play_rounds(cfg: &Config, tracks: &[Track], player: &Player, term: &mut Tui) 
     }
     // An aborted session quits straight away: no scoreboard.
     if !session.aborted() {
-        tui::board::show(term, &session)?;
+        // The board's all-time numbers should already include this session.
+        let mut shown = stats.clone();
+        shown.record(&session);
+        tui::board::show(term, &session, &shown)?;
     }
     Ok(session)
 }

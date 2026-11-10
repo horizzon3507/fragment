@@ -12,6 +12,10 @@ use fragment::stats::Stats;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Cli {
+    /// Music library directory (same as --dir; the flag wins if both are given).
+    #[arg(value_name = "DIR")]
+    dir_arg: Option<PathBuf>,
+
     /// Music library directory.
     #[arg(long, value_name = "DIR")]
     dir: Option<PathBuf>,
@@ -19,11 +23,21 @@ struct Cli {
     /// Number of rounds per session.
     #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..=99))]
     rounds: Option<u32>,
+
+    /// Print lifetime stats and exit.
+    #[arg(long)]
+    stats: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let cfg = Config::load(cli.dir, cli.rounds)?;
+
+    if cli.stats {
+        Stats::load().unwrap_or_default().print();
+        return Ok(());
+    }
+
+    let cfg = Config::load(cli.dir.or(cli.dir_arg), cli.rounds)?;
 
     if !cfg.music_dir.exists() {
         eprintln!(
@@ -48,7 +62,10 @@ fn main() -> Result<()> {
         }
     };
 
-    let session = match session::run(&cfg, tracks) {
+    // Loaded before the session so the scoreboard can show all-time
+    // numbers including the game just played.
+    let mut stats = Stats::load().unwrap_or_default();
+    let session = match session::run(&cfg, tracks, &stats) {
         Ok(session) => session,
         Err(err) => {
             eprintln!("fragment: {err:#}");
@@ -56,7 +73,6 @@ fn main() -> Result<()> {
         }
     };
 
-    let mut stats = Stats::load().unwrap_or_default();
     stats.record(&session);
     if let Err(err) = stats.save() {
         eprintln!("fragment: could not save stats: {err}");

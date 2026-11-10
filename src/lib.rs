@@ -5,5 +5,6 @@ pub mod player;
 pub mod scoring;
 pub mod session;
 pub mod stats;
+pub mod suggest;
 pub mod tui;
 pub mod types;

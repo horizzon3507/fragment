@@ -29,6 +29,18 @@ We only call something **stable** when we mean it.
 
 </details>
 
+## v0.2.0-alpha · 05/11/2026
+
+Sound, actually. The first alpha shipped an mpv IPC call its newer builds reject, so snippets never loaded and the game was silent — this version fixes playback and adds the quality-of-life layer on top. This version was made for CLI with an alpha release channel on 05/11/2026 (v0.2.0-alpha).
+
+- Fix silent playback: mpv 0.41 rejects `loadfile`'s options object (`invalid parameter`), so no file ever loaded. The player now loads paused, waits for mpv's `file-loaded` event before seeking (a seek sent while the file opens is silently dropped), and checks every IPC reply — playback errors now reach the status line instead of vanishing.
+- Title autocomplete under the guess input: type to filter the library (normalized substring, title prefixes first), `↑`/`↓` to pick, `→` or `Enter` to accept, `Esc` to clear the pick.
+- `Ctrl+R` replays the current snippet from the same offset.
+- Positional music dir: `fragment ~/Music/rock` alongside `--dir`.
+- Scoreboard charts: per-round score bars, all-time wins per level, a recent-scores sparkline and an all-time stats line. `fragment --stats` prints the same numbers to stdout.
+- Stats file gains `wins_by_level` and `recent_scores`; older files load unchanged.
+- Various other small tweaks.
+
 ## v0.1.0-alpha · 04/11/2026
 
 The first cut: the full local Heardle loop in your terminal. Pick a directory of music, hear a 1-second snippet, type the title before the snippet eats the whole song. This version was made for CLI with an alpha release channel on 04/11/2026 (v0.1.0-alpha).
