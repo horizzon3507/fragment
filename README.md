@@ -39,7 +39,7 @@ So `fragment ~/Music/rock` plays only from that directory.
 
 ## How it plays
 
-Each round picks a random track and a random start offset, then plays a **1s** snippet. Each level's countdown gives you as many seconds to guess as the snippet is long; a wrong guess, a timeout, or `Tab`/`+` doubles the snippet:
+Each round picks a random track and a random start offset, then plays a **1s** snippet. Each level's countdown gives you as many seconds to guess as the snippet is long — when it runs out the round waits for `Tab`/`+` to grow the snippet (you can keep guessing meanwhile); a wrong guess or a `Tab`/`+` skip doubles it:
 
 **1s → 2s → 4s → 8s → 16s → 30s**
 
@@ -47,12 +47,12 @@ Once the last level is spent — or you give up — the reveal shows the title, 
 
 | Key | Action |
 | --- | --- |
-| `Enter` | Submit guess — or accept the highlighted suggestion (blank Enter clears the prompt) |
-| `Tab` / `+` | Skip to the next snippet length |
+| `Enter` | Submit the highlighted suggestion — or the top one (raw input only when nothing matches) |
+| `Tab` / `+` | Grow the snippet to the next level (also confirms when the timer runs out) |
 | `Ctrl+R` | Replay the current snippet from the same offset |
-| `↑` / `↓` | Move the suggestion highlight |
-| `→` | Accept a suggestion (the highlight, or the top row) |
-| `Esc` | Clear the suggestion pick, then give up and reveal the answer |
+| `↑` / `↓` | Move the suggestion highlight (wraps around) |
+| `→` | Fill the input from the highlight (or the top row) to edit before submitting |
+| `Esc` | Reset the suggestion pick, then give up and reveal the answer |
 | `Ctrl+C` | Quit the session |
 | `Backspace` | Edit your guess |
 

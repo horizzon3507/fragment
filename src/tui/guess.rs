@@ -48,6 +48,8 @@ struct View<'a> {
     reveal: Option<Reveal>,
     suggestions: &'a [&'a Candidate],
     sel: Option<usize>,
+    /// The level timer ran out and the round waits on Tab/+ to grow.
+    expired: bool,
 }
 
 /// The frozen data behind the reveal screen.
@@ -88,6 +90,9 @@ pub fn play_round(
         if sel.is_some_and(|s| s >= suggestions.len()) {
             sel = None;
         }
+        // The level timer ran out: the round pauses and waits for Tab/+
+        // to grow the snippet instead of escalating on its own.
+        let expired = reveal.is_none() && level_start.elapsed() >= level_len;
         let view = View {
             header,
             input: &input,
@@ -96,18 +101,11 @@ pub fn play_round(
             reveal,
             suggestions: &suggestions,
             sel,
+            expired,
         };
         term.draw(|frame| draw(frame, round, &view))?;
 
-        // The level timer ran out: same as pressing Tab.
-        if reveal.is_none() && level_start.elapsed() >= level_len {
-            if advance(round, player, &mut status, &mut level_start) {
-                reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
-            }
-            continue;
-        }
-
-        let timeout = if reveal.is_some() {
+        let timeout = if reveal.is_some() || expired {
             TICK
         } else {
             level_len.saturating_sub(level_start.elapsed()).min(TICK)
@@ -155,29 +153,41 @@ pub fn play_round(
             (KeyCode::Esc, _) => {
                 reveal = Some(enter_reveal(round, player, RoundEnd::GaveUp));
             }
+            // The top row is always highlighted, so ↑/↓ move relative to
+            // that effective pick — the first ↓ visibly descends.
             (KeyCode::Up, _) if !suggestions.is_empty() => {
-                sel = Some(sel.map_or(0, |s| s.saturating_sub(1)));
+                let i = sel.unwrap_or(0);
+                sel = Some(if i == 0 { suggestions.len() - 1 } else { i - 1 });
             }
             (KeyCode::Down, _) if !suggestions.is_empty() => {
-                sel = Some(sel.map_or(0, |s| (s + 1).min(suggestions.len() - 1)));
+                sel = Some((sel.unwrap_or(0) + 1) % suggestions.len());
             }
-            // Right accepts the highlight, or the top row when nothing is
-            // picked. Enter accepts only a picked row; otherwise it submits.
+            // Right fills the input from the highlight (or the top row)
+            // so the text can be edited before submitting.
             (KeyCode::Right, _) => accept(&suggestions, &mut sel, &mut input),
-            (KeyCode::Enter, _) if sel.is_some() => accept(&suggestions, &mut sel, &mut input),
-            // A blank Enter clears the prompt without spending the level.
-            (KeyCode::Enter, _) if input.trim().is_empty() => input.clear(),
-            (KeyCode::Enter, _) => match round.submit(&input) {
-                GuessOutcome::Correct => {
-                    reveal = Some(enter_reveal(round, player, RoundEnd::Solved));
-                }
-                GuessOutcome::Wrong => {
+            // Enter submits the highlighted suggestion — or the top
+            // prediction — never the raw input while suggestions show.
+            (KeyCode::Enter, _) => {
+                let guess = suggestions
+                    .get(sel.unwrap_or(0))
+                    .map_or_else(|| input.trim().to_string(), |c| c.fill().to_string());
+                if guess.is_empty() {
                     input.clear();
-                    if advance(round, player, &mut status, &mut level_start) {
-                        reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
+                } else {
+                    match round.submit(&guess) {
+                        GuessOutcome::Correct => {
+                            reveal = Some(enter_reveal(round, player, RoundEnd::Solved));
+                        }
+                        GuessOutcome::Wrong => {
+                            input.clear();
+                            sel = None;
+                            if advance(round, player, &mut status, &mut level_start) {
+                                reveal = Some(enter_reveal(round, player, RoundEnd::Exhausted));
+                            }
+                        }
                     }
                 }
-            },
+            }
             // Ctrl+R replays the current snippet from the same offset.
             (KeyCode::Char('r' | 'R'), m) if m.contains(KeyModifiers::CONTROL) => {
                 level_start = start_level(round, player, &mut status);
@@ -319,12 +329,16 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
             format!(" {msg}"),
             Style::default().fg(Color::Red),
         )),
+        None if view.expired => Line::from(Span::styled(
+            " time's up — tab/+: next level · enter: keep guessing · esc: give up",
+            Style::default().fg(Color::Yellow),
+        )),
         None => {
             let hint = if !view.suggestions.is_empty() {
                 if view.sel.is_some() {
-                    " ↑↓: move · →/enter: accept · esc: clear pick"
+                    " ↑↓: move · enter: guess pick · →: fill · esc: clear pick"
                 } else {
-                    " ↑↓: pick · →/enter: accept · esc: give up"
+                    " ↑↓: pick · enter: guess top · →: fill · esc: give up"
                 }
             } else {
                 " enter: guess · tab/+: more · ctrl+r: replay · esc: give up"
@@ -363,7 +377,9 @@ fn draw(frame: &mut Frame, round: &Round, view: &View) {
             .iter()
             .enumerate()
             .map(|(i, cand)| {
-                if view.sel == Some(i) {
+                // With no pick the top row is highlighted: that is what
+                // Enter submits.
+                if i == view.sel.unwrap_or(0) {
                     Line::from(vec![
                         Span::styled(" ▸ ", accent),
                         Span::styled(cand.display.clone(), accent),
