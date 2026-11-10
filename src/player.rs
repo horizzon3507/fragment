@@ -108,8 +108,7 @@ impl Player {
         };
 
         let (events_tx, events_rx) = channel();
-        let pending: Arc<Mutex<HashMap<u64, Sender<Value>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let pending: Arc<Mutex<HashMap<u64, Sender<Value>>>> = Arc::new(Mutex::new(HashMap::new()));
         thread::spawn({
             let pending = Arc::clone(&pending);
             move || read_loop(&mut reader, &pending, &events_tx)
@@ -134,6 +133,11 @@ impl Player {
     /// audible; mpv's `file-loaded` event gates the seek, because a seek
     /// sent while the file is still opening is silently dropped.
     pub fn play_snippet(&self, path: &Path, offset: Duration, length: Duration) -> Result<()> {
+        // Canonicalize: mpv reports the resolved absolute path on `path`,
+        // and the load check below compares against it.
+        let path = path
+            .canonicalize()
+            .with_context(|| format!("cannot resolve {}", path.display()))?;
         let path = path.to_str().context("snippet path is not valid UTF-8")?;
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
@@ -248,7 +252,9 @@ impl Drop for Player {
 /// The pending entry is inserted before the write so a fast reply can
 /// never arrive before the waiter exists.
 fn send_command(ipc: &Ipc, command: Value) -> Result<Value> {
-    let id = command["request_id"].as_u64().context("request_id missing")?;
+    let id = command["request_id"]
+        .as_u64()
+        .context("request_id missing")?;
     let (tx, rx) = channel();
     ipc.pending
         .lock()
@@ -292,8 +298,10 @@ fn read_loop(
                         continue;
                     };
                     if let Some(id) = v.get("request_id").and_then(Value::as_u64) {
-                        if let Some(tx) =
-                            pending.lock().unwrap_or_else(|e| e.into_inner()).remove(&id)
+                        if let Some(tx) = pending
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&id)
                         {
                             let _ = tx.send(v);
                         }

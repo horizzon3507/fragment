@@ -130,10 +130,18 @@ mod tests {
             track("Café del Mar", Some("Energy 52")),
             track("Blue Monday", Some("New Order")),
         ]);
-        let hits: Vec<&str> = cands.search("SKYF", 5).iter().map(|c| c.display.as_str()).collect();
+        let hits: Vec<&str> = cands
+            .search("SKYF", 5)
+            .iter()
+            .map(|c| c.display.as_str())
+            .collect();
         assert_eq!(hits, ["Adele - Skyfall"]);
         // Accents and case fold away on both sides.
-        let hits: Vec<&str> = cands.search("cafe", 5).iter().map(|c| c.display.as_str()).collect();
+        let hits: Vec<&str> = cands
+            .search("cafe", 5)
+            .iter()
+            .map(|c| c.display.as_str())
+            .collect();
         assert_eq!(hits, ["Energy 52 - Café del Mar"]);
     }
 
@@ -143,7 +151,11 @@ mod tests {
             track("Skyfall", Some("Adele")),
             track("Blue Monday", Some("New Order")),
         ]);
-        let hits: Vec<&str> = cands.search("adele sky", 5).iter().map(|c| c.display.as_str()).collect();
+        let hits: Vec<&str> = cands
+            .search("adele sky", 5)
+            .iter()
+            .map(|c| c.display.as_str())
+            .collect();
         assert_eq!(hits, ["Adele - Skyfall"]);
     }
 
@@ -154,7 +166,11 @@ mod tests {
             track("Nightcall", Some("B")),
             track("Nightingale", Some("C")),
         ]);
-        let hits: Vec<&str> = cands.search("night", 5).iter().map(|c| c.display.as_str()).collect();
+        let hits: Vec<&str> = cands
+            .search("night", 5)
+            .iter()
+            .map(|c| c.display.as_str())
+            .collect();
         assert_eq!(hits[0], "B - Nightcall");
         assert_eq!(hits[1], "C - Nightingale");
         assert_eq!(hits[2], "A - Another Night");

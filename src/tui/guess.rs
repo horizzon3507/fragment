@@ -110,9 +110,7 @@ pub fn play_round(
         let timeout = if reveal.is_some() {
             TICK
         } else {
-            level_len
-                .saturating_sub(level_start.elapsed())
-                .min(TICK)
+            level_len.saturating_sub(level_start.elapsed()).min(TICK)
         };
         if !event::poll(timeout)? {
             continue;
@@ -252,16 +250,22 @@ fn advance(
 }
 
 fn draw(frame: &mut Frame, round: &Round, view: &View) {
-    let [header_area, body, misses_area, status_area, input_area, sugg_area] =
-        Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Min(4),
-            Constraint::Max(LEVELS.len() as u16),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Max(5),
-        ])
-        .areas(frame.area());
+    let [
+        header_area,
+        body,
+        misses_area,
+        status_area,
+        input_area,
+        sugg_area,
+    ] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(4),
+        Constraint::Max(LEVELS.len() as u16),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Max(5),
+    ])
+    .areas(frame.area());
 
     let dim = Style::default().add_modifier(Modifier::DIM);
     let header = view.header;
