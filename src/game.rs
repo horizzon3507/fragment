@@ -78,7 +78,7 @@ impl Round {
         if guess.trim().is_empty() {
             return GuessOutcome::Wrong;
         }
-        self.misses.push(guess.to_string());
+        self.misses.push(guess.trim().to_string());
         if self.level_idx == LAST_LEVEL {
             self.exhausted = true;
         }

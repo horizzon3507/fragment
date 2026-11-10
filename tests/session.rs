@@ -108,6 +108,24 @@ fn full_session_arc_tracks_totals_and_best_streak() {
 }
 
 #[test]
+fn record_round_scores_with_the_pre_round_streak() {
+    let mut session = Session::new(3);
+    session.record_round(track("Song A", Some("Some Artist"), 200), true, 0, Duration::ZERO);
+    // First solve scores with streak 0: level-1 base × 1.0.
+    assert_eq!(
+        session.results()[0].score(),
+        fragment::scoring::score(0, Duration::ZERO, 0)
+    );
+    assert_eq!(session.results()[0].score(), 1000);
+
+    session.record_round(track("Song B", Some("Some Artist"), 200), true, 0, Duration::ZERO);
+    // Second solve scores with streak 1: ×1.1, so the multiplier uses
+    // the streak the round started with, not the streak after record.
+    assert_eq!(session.results()[1].score(), 1100);
+    assert_eq!(session.total_score(), 2100);
+}
+
+#[test]
 fn abort_marks_the_session_as_aborted() {
     let mut session = Session::new(3);
     session.record(result("Song A", true, 0, 1, 500));
